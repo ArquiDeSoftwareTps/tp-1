@@ -11,6 +11,13 @@ services:
         links:
             - node
 
+    node:
+        image: node:20.6.1
+        volumes:
+            - ./app:/var/www
+        working_dir: /var/www
+        command: node index.js
+
     graphite:
         image: graphiteapp/graphite-statsd:1.1.10-5
         volumes:
