@@ -6,23 +6,23 @@ services:
         ports:
             - "5555:80"
         volumes:
-            - ./nginx_reverse_proxy.conf:/etc/nginx/conf.d/default.conf:ro
-            - ./store/static/files:/static:ro
+            - ../../gateway/nginx_reverse_proxy.conf:/etc/nginx/conf.d/default.conf:ro
+            - ../../store/static/files:/static:ro
         links:
             - node
 
     node:
         image: node:20.6.1
         volumes:
-            - ./app:/var/www
+            - ../../app:/var/www
         working_dir: /var/www
-        command: node index.js
+        command: node src/index.js
 
     graphite:
         image: graphiteapp/graphite-statsd:1.1.10-5
         volumes:
-            - ./statsd.config.js:/opt/statsd/config.js
-            - ./graphite.storage-schemas.conf:/opt/graphite/conf/storage-schemas.conf
+            - ../../metrics/statsd.config.js:/opt/statsd/config.js
+            - ../../metrics/graphite.storage-schemas.conf:/opt/graphite/conf/storage-schemas.conf
         ports:
             - "8090:80"
             - "8125:8125/udp"
