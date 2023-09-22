@@ -1,0 +1,13 @@
+version: '3'
+
+services:
+    node:
+        image: node:20.6.1
+        volumes:
+            - ./app:/var/www
+        working_dir: /var/www
+        command: node src/index.js
+        networks:
+            mashup:
+                aliases:
+                    - mashup-api
