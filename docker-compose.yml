@@ -44,8 +44,8 @@ services:
             - "8080:8080"
         volumes:
             - "/:/rootfs:ro"
-            - "/var/run:/var/run:rw"
             - "/sys:/sys:ro"
+            - "/var/run${MAC_SOCK}:/var/run${MAC_SOCK}:rw"
             - "/var/lib/docker/:/var/lib/docker:ro"
         networks:
             - mashup

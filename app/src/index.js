@@ -15,6 +15,10 @@ app.listen(port, () => {
     console.log(`Example app listening on port ${port}`);
 });
 
+app.get('/ping', async (req, res) => {
+        res.send("pong");
+        return;
+    } );
 
 
 app.get('/metar', async (req, res) => {

@@ -7,8 +7,7 @@ services:
     node:
         image: node:20.6.1
         volumes:
-            - ./app:/var/www
-        working_dir: /var/www
+            - ./app/src:/var/www/src
         command: node src/index.js --mode=cache
         networks:
             mashup:

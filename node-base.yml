@@ -2,11 +2,10 @@ version: '3'
 
 services:
     node:
-        image: node:20.6.1
+        build: app
         volumes:
-            - ./app:/var/www
+            - ./app/src:/var/www/src
         working_dir: /var/www
-        command: node src/index.js
         networks:
             mashup:
                 aliases:
