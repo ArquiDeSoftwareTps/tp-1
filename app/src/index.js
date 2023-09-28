@@ -1,3 +1,4 @@
+
 require('dotenv').config();
 const express = require('express');
 const app = express();
@@ -7,12 +8,60 @@ const axios = require('axios');
 
 const { XMLParser } = require('fast-xml-parser');
 const { decode } = require('metar-decoder');
+
+const {createClient} = require('redis');
+
 const parser = new XMLParser();
 
+// Instead of require('nanoid')
+import('nanoid').then(({ nanoid }) => {
+    // Generate a random ID with a default length of 21 characters
+    const id = nanoid();
+  
+    console.log('Generated ID:', id);
 
+    app.use((req, res, next) => {
+        res.setHeader('X-API-Id',id);
+        next();
+    });
+  });
+  
+const cacheEnabled = process.env.ENABLE_CACHE === 'true';
+const rateLimitEnabled = process.env.ENABLE_RATE_LIMIT === 'true';
+
+const redisUrl = 'redis://redis-cache:6379';
+const redisClient = createClient({url: redisUrl});
+
+
+(async () => {
+    if (cacheEnabled)
+    {
+        console.log(`connecting to Redis using: ${redisUrl}`);
+        await redisClient.connect();
+    }
+    else 
+    {
+        console.log(`skipping connection to Redis`);
+    }
+})();
+
+process.on('SIGTERM', async () => {
+    if (cacheEnabled)
+    {
+        console.log(`shutting down connection to Redis from: ${redisUrl}`);
+        await redisClient.quit();
+    }
+    else
+    {
+        console.log(`shutting down...`);
+    }
+});
 
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`);
+    console.log(`Caching is enabled: ${cacheEnabled}`);
+    console.log(`Rate Limit is enabled: ${cacheEnabled}`);
+    
 });
 
 app.get('/ping', async (req, res) => {
