@@ -1,0 +1,27 @@
+version: '3'
+
+services:
+    redis:
+        image: redis:7.2.1
+        networks:
+            mashup:
+                aliases:
+                    - redis-cache
+
+    node:
+        build: app
+        volumes:
+            - ./app/src:/var/www/src
+        command: node src/index.js
+        networks:
+            mashup:
+                aliases:
+                    - mashup-api
+        # wait for redis to be created - no guarantees of being fully loaded
+        depends_on:
+            - redis
+        environment:
+            - REDIS_HOST=redis # This environment variable will be used to connect to the Redis service
+            - ENABLE_CACHE=true
+        links:
+            - redis # Create a network link to the Redis service
