@@ -69,6 +69,14 @@ app.get('/ping', async (req, res) => {
         return;
     } );
 
+app.get('/busy', async (req, res) => {
+    // Busy wait to generate load
+    for (let start = new Date(); new Date() - start < 1000;);
+    
+    res.status(200).send("busy");
+    return;
+} );
+
 
 app.get('/metar', async (req, res) => {
     const station = req.query.station;

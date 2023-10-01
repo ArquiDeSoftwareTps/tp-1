@@ -1,0 +1,26 @@
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555/api'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-api"
+        publish-metrics:
+          - type: statsd
+            prefix: "artillery.publish_metrics."
+
+  pool: 5 # All HTTP requests from all virtual users will be sent over the same connections
+
+  phases:
+    - name: Stable
+      duration: 60
+      arrivalRate: 2
+    
+
+scenarios:
+  - nane: Test CPU Max
+    flow:
+      - get:
+          url: '/busy'
