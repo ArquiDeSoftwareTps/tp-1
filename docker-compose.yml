@@ -6,7 +6,7 @@ services:
         ports:
             - "5555:80"
         volumes:
-            - ./gateway/nginx_reverse_proxy.conf:/etc/nginx/conf.d/default.conf:ro
+            - ./gateway/nginx_reverse_proxy${RP_EXTENSION}.conf:/etc/nginx/conf.d/default.conf:ro
             - ./store/static/files:/static:ro
         links:
             - node
