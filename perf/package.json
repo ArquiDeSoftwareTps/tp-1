@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "artillery": "artillery",
-    "node": "artillery run -R ./reset-counts2.js root.yaml -e node",
+    "node": "artillery run root.yaml -e node",
     "scenario": "./run-scenario.sh"
   },
   "author": "",

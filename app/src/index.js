@@ -85,7 +85,7 @@ app.get('/metar', async (req, res) => {
         return;
     }
     
-    const response = await axios.get(`https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString=${station}&hoursBeforeNow=2`);
+    const response = await axios.get(`https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString=${station}&hoursBeforeNow=1`);
     if (!response){
         res.status(404).send("There has been a problem with an external API");
         return;
