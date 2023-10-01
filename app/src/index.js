@@ -64,77 +64,10 @@ app.listen(port, () => {
     
 });
 
-app.get('/ping', async (req, res) => {
-        res.send("pong");
-        return;
-    } );
-
-
-app.get('/metar', async (req, res) => {
-        const station = req.query.station;
-        if (!station) {
-            res.status(400).send("Station parameter is required");
-            return;
-        }
-
-        if (cacheEnabled) {
-            // Verificar si los datos están en caché
-            redisClient.get(`metar:${station}`, async (err, cachedData) => {
-                if (err) {
-                    console.error(err);
-                    res.status(500).send("Error checking cache");
-                    return;
-                }
-
-                if (cachedData) {
-                    // Los datos están en caché, servirlos desde la caché
-                    res.send(JSON.parse(cachedData));
-                } else {
-                    // Los datos no están en caché, realizar la solicitud a la API externa
-                    const response = await axios.get(`https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString=${station}&hoursBeforeNow=1`);
-                    if (!response) {
-                        res.status(404).send("There has been a problem with an external API");
-                        return;
-                    }
-
-                    try {
-                        const parsed = parser.parse(response.data);
-                        const decoded = decode(parsed.response.data.METAR.raw_text);
-
-                        // Almacenar los datos en caché durante un tiempo determinado (ajusta el tiempo según tus necesidades)
-                        redisClient.setex(`metar:${station}`, 3600, JSON.stringify(decoded));
-
-                        res.send(decoded);
-                    } catch (e) {
-                        console.log(response.data);
-                        res.status(404).send("There has been a problem parsing the API response");
-                    }
-                }
-            });
-        } else {
-            const response = await axios.get(`https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString=${station}&hoursBeforeNow=1`);
-            if (!response){
-                res.status(404).send("There has been a problem with an external API");
-                return;
-            }
-            try {
-                const parsed = parser.parse(response.data);
-                const decoded = decode(parsed.response.data.METAR.raw_text);
-                res.send(decoded);
-            } catch (e) {
-                console.log(response.data);
-                res.status(404).send("There has been a problem parsing the API response");
-            }
-        }
-});
-
-
-app.get('/spaceflight_news', async (req, res) => {
-    const newsCount = req.query.n || 5;
-
+const getFromCacheOrApi = async (cacheKey, apiRequestFunction, res, cacheTime) => {
     if (cacheEnabled) {
-        // Verificar si los datos están en caché
-        redisClient.get(`spaceflight_news:${newsCount}`, async (err, cachedData) => {
+        // Verify if the data is in the cache
+        redisClient.get(cacheKey, async (err, cachedData) => {
             if (err) {
                 console.error(err);
                 res.status(500).send("Error checking cache");
@@ -142,18 +75,17 @@ app.get('/spaceflight_news', async (req, res) => {
             }
 
             if (cachedData) {
-                // Los datos están en caché, servirlos desde la caché
+                // If the data is in the cache, return it
                 res.send(JSON.parse(cachedData));
             } else {
-                // Los datos no están en caché, realizar la solicitud a la API externa
+                // If the data is not in the cache, make the request to the API
                 try {
-                    const response = await axios.get(`https://api.spaceflightnewsapi.net/v3/articles?_limit=${newsCount}`);
-                    const titles = response.data.map((item) => item.title);
+                    const response = await apiRequestFunction();
 
-                    // Almacenar los datos en caché durante un tiempo determinado (ajusta el tiempo según tus necesidades)
-                    redisClient.setex(`spaceflight_news:${newsCount}`, 3600, JSON.stringify(titles));
+                    // Store the data in the cache
+                    redisClient.setex(cacheKey, cacheTime, JSON.stringify(response));
 
-                    res.send(titles);
+                    res.send(response);
                 } catch (e) {
                     console.log(e);
                     res.status(404).send("There has been a problem with the API");
@@ -161,28 +93,72 @@ app.get('/spaceflight_news', async (req, res) => {
             }
         });
     } else {
-        // Si el caché está deshabilitado, realizar la solicitud a la API externa sin almacenar en caché
-        // (mantén este código como está)
+        // If the cache is disabled, make the request to the API
         try {
-            const response = await axios.get(`https://api.spaceflightnewsapi.net/v3/articles?_limit=${newsCount}`);
-            const titles = response.data.map((item) => item.title);
-            res.send(titles);
+            const response = await apiRequestFunction();
+            res.send(response);
         } catch (e) {
             console.log(e);
             res.status(404).send("There has been a problem with the API");
         }
     }
+};
+
+
+app.get('/ping', async (req, res) => {
+        res.send("pong");
+    } );
+
+
+app.get('/metar', async (req, res) => {
+    const station = req.query.station;
+    if (!station) {
+        res.status(400).send("Station parameter is required");
+        return;
+    }
+
+    const cacheKey = `metar:${station}`;
+
+    const apiRequestFunction = async () => {
+        const response = await axios.get(`https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString=${station}&hoursBeforeNow=1`);
+        if (!response) {
+            res.status(404).send("There has been a problem with an external API");
+            return;
+        }
+
+        const parsed = parser.parse(response.data);
+        return decode(parsed.response.data.METAR.raw_text);
+    };
+
+    await getFromCacheOrApi(cacheKey, apiRequestFunction, res, 3600);
+});
+
+
+
+app.get('/spaceflight_news', async (req, res) => {
+    const newsCount = req.query.n || 5;
+
+    const cacheKey = `spaceflight_news:${newsCount}`;
+
+    const apiRequestFunction = async () => {
+        const response = await axios.get(`https://api.spaceflightnewsapi.net/v3/articles?_limit=${newsCount}`);
+        return response.data.map((item) => item.title);
+    };
+
+    await getFromCacheOrApi(cacheKey, apiRequestFunction, res, 3600);
 });
 
 
 app.get('/quote', async (req, res) => {
-    try {
+    const cacheKey = 'random_quote';
+
+    const apiRequestFunction = async () => {
         const response = await axios.get('https://api.quotable.io/quotes/random');
-        const quote = response.data.map((item) => { return { quote: item.content, author: item.author } });
-        res.send(quote);
-    } catch (e) {
-        console.log(e);
-        res.status(404).send("There has been a problem with the API");
-        return;
-    }
+        return response.data.map((item) => {
+            return {quote: item.content, author: item.author};
+        });
+    };
+
+    await getFromCacheOrApi(cacheKey, apiRequestFunction, res, 3600);
 });
+
