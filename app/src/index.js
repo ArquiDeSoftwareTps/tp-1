@@ -121,7 +121,7 @@ app.get('/busy', async (req, res) => {
 
 app.get('/metar', async (req, res) => {
     const station = req.query.station;
-    var metrics = new lynx('localhost', 8125);
+    var metrics = new lynx('graphite', 8125);
     const timer = metrics.createTimer('metar_api_full');
 
 
@@ -154,7 +154,7 @@ app.get('/metar', async (req, res) => {
 app.get('/spaceflight_news', async (req, res) => {
     const newsCount = req.query.n || 5;
 
-    var metrics = new lynx('localhost', 8125);
+    var metrics = new lynx('graphite', 8125);
     const timer = metrics.createTimer('spaceflight_news_api_full');
 
     const cacheKey = `spaceflight_news:${newsCount}`;
@@ -173,7 +173,7 @@ app.get('/spaceflight_news', async (req, res) => {
 
 app.get('/quote', async (req, res) => {
     const cacheKey = 'random_quote';
-    var metrics = new lynx('localhost', 8125);
+    var metrics = new lynx('graphite', 8125);
     const timer = metrics.createTimer('quote_api_full');
 
     const apiRequestFunction = async () => {
