@@ -1,0 +1,53 @@
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555/api'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-api"
+        publish-metrics:
+          - type: statsd
+            prefix: "artillery.publish_metrics."
+
+  pool: 100 # All HTTP requests from all virtual users will be sent over the same connections
+
+  variables:
+    airportcode:
+      - SAEZ
+      - KDEN
+      - EBCI
+      - KDBQ
+      - KGPT
+      - KMCI
+      - KMIA
+      - SAAR
+      - SARF
+      - SARP
+      - SAZM
+      - SAZS
+      - SCBA
+      - SCFA
+      - SCEL
+      - SUAA
+      - SULS
+    
+  phases:
+    - name: Ramp
+      duration: 30
+      arrivalRate: 1
+      rampTo: 10
+    - name: Plain
+      duration: 120
+      arrivalRate: 10
+    - name: Stress
+      duration: 120
+      arrivalRate: 10
+      rampTo: 400
+
+scenarios:
+  - nane: Test Ping
+    flow:
+      - get:
+          url: '/metar?station={{ airportcode }}'
