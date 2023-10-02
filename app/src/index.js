@@ -1,6 +1,7 @@
 
 require('dotenv').config();
 const express = require('express');
+const lynx = require('lynx');
 const app = express();
 const port = process.env.APP_PORT || 3001;
 
@@ -112,15 +113,21 @@ app.get('/ping', async (req, res) => {
 
 app.get('/metar', async (req, res) => {
     const station = req.query.station;
+    var metrics = new lynx('localhost', 8125);
+    const timer = metrics.createTimer('metar_api_full');
+
+
     if (!station) {
         res.status(400).send("Station parameter is required");
         return;
     }
-
     const cacheKey = `metar:${station}`;
 
     const apiRequestFunction = async () => {
+        const timer2 = metrics.createTimer('metar_api_request');
         const response = await axios.get(`https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString=${station}&hoursBeforeNow=1`);
+        timer2.stop();
+
         if (!response) {
             res.status(404).send("There has been a problem with an external API");
             return;
@@ -131,6 +138,7 @@ app.get('/metar', async (req, res) => {
     };
 
     await getFromCacheOrApi(cacheKey, apiRequestFunction, res, 3600);
+    timer.stop();
 });
 
 
@@ -138,27 +146,38 @@ app.get('/metar', async (req, res) => {
 app.get('/spaceflight_news', async (req, res) => {
     const newsCount = req.query.n || 5;
 
+    var metrics = new lynx('localhost', 8125);
+    const timer = metrics.createTimer('spaceflight_news_api_full');
+
     const cacheKey = `spaceflight_news:${newsCount}`;
 
     const apiRequestFunction = async () => {
+        const timer2 = metrics.createTimer('metar_api_request');
         const response = await axios.get(`https://api.spaceflightnewsapi.net/v3/articles?_limit=${newsCount}`);
+        timer2.stop();
         return response.data.map((item) => item.title);
     };
 
     await getFromCacheOrApi(cacheKey, apiRequestFunction, res, 3600);
+    timer.stop();
 });
 
 
 app.get('/quote', async (req, res) => {
     const cacheKey = 'random_quote';
+    var metrics = new lynx('localhost', 8125);
+    const timer = metrics.createTimer('quote_api_full');
 
     const apiRequestFunction = async () => {
+        var timer2 = metrics.createTimer('quote_api_request');
         const response = await axios.get('https://api.quotable.io/quotes/random');
+        timer2.stop();
         return response.data.map((item) => {
             return {quote: item.content, author: item.author};
         });
     };
 
     await getFromCacheOrApi(cacheKey, apiRequestFunction, res, 3600);
+    timer.stop();
 });
 
