@@ -17,14 +17,14 @@ config:
     - name: Ramp
       duration: 30
       arrivalRate: 1
-      rampTo: 10
+      rampTo: 20
     - name: Plain
       duration: 120
-      arrivalRate: 10
+      arrivalRate: 20
     - name: Stress
       duration: 120
       arrivalRate: 5
-      rampTo: 400
+      rampTo: 500
 
 scenarios:
   - nane: Test Ping
