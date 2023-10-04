@@ -11,7 +11,7 @@ config:
           - type: statsd
             prefix: "artillery.publish_metrics."
 
-  pool: 5 # All HTTP requests from all virtual users will be sent over the same connections
+  pool: 100 # All HTTP requests from all virtual users will be sent over the same connections
 
   phases:
     - name: Ramp
@@ -19,7 +19,7 @@ config:
       arrivalRate: 1
       rampTo: 20
     - name: Plain
-      duration: 120
+      duration: 180
       arrivalRate: 20
     - name: Stress
       duration: 120
