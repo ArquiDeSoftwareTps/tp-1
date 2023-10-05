@@ -29,8 +29,10 @@ import('nanoid').then(({ nanoid }) => {
   
 const cacheEnabled = process.env.ENABLE_CACHE === 'true';
 const rateLimitEnabled = process.env.ENABLE_RATE_LIMIT === 'true';
+//Period to be inspected from now up to this number of hours before
+const metarCheckPeriod = 3;
 
-const redisUrl = 'redis://redis-cache:6379';
+const redisUrl = 'redis://redis:6379';
 const redisClient = createClient({url: redisUrl});
 
 
@@ -39,6 +41,7 @@ const redisClient = createClient({url: redisUrl});
     {
         console.log(`connecting to Redis using: ${redisUrl}`);
         await redisClient.connect();
+        console.log(`Redis connected!`);
     }
     else 
     {
@@ -66,33 +69,35 @@ app.listen(port, () => {
 });
 
 const getFromCacheOrApi = async (cacheKey, apiRequestFunction, res, cacheTime) => {
-    if (cacheEnabled) {
+    //cacheTime == 0 means to avoid caching
+    if (cacheEnabled && cacheTime > 0) {
         // Verify if the data is in the cache
-        redisClient.get(cacheKey, async (err, cachedData) => {
-            if (err) {
-                console.error(err);
-                res.status(500).send("Error checking cache");
-                return;
+        console.log(`checking Redis for key: ${cacheKey}`);
+
+        const redis_response = await redisClient.get(cacheKey);
+
+        if (redis_response !== null)
+        {
+            console.log(`Cache hit for key: ${cacheKey}`);
+            // If the data is in the cache, return it
+            res.send(JSON.parse(redis_response));
+        }
+        else {
+            // If the data is not in the cache, make the request to the API
+            try {
+                console.log(`Cache miss for key: ${cacheKey}`);
+                const response = await apiRequestFunction();
+
+                // Store the data in the cache
+                redisClient.set(cacheKey, JSON.stringify(response), {EX: cacheTime});
+
+                res.send(response);
+            } catch (e) {
+                console.log(e);
+                res.status(500).send("There has been a problem with the API:" + e.message );
             }
-
-            if (cachedData) {
-                // If the data is in the cache, return it
-                res.send(JSON.parse(cachedData));
-            } else {
-                // If the data is not in the cache, make the request to the API
-                try {
-                    const response = await apiRequestFunction();
-
-                    // Store the data in the cache
-                    redisClient.setex(cacheKey, cacheTime, JSON.stringify(response));
-
-                    res.send(response);
-                } catch (e) {
-                    console.log(e);
-                    res.status(404).send("There has been a problem with the API");
-                }
             }
-        });
+        
     } else {
         // If the cache is disabled, make the request to the API
         try {
@@ -100,7 +105,7 @@ const getFromCacheOrApi = async (cacheKey, apiRequestFunction, res, cacheTime) =
             res.send(response);
         } catch (e) {
             console.log(e);
-            res.status(404).send("There has been a problem with the API");
+            res.status(500).send("There has been a problem with the API:" + e.message);
         }
     }
 };
@@ -133,7 +138,10 @@ app.get('/metar', async (req, res) => {
 
     const apiRequestFunction = async () => {
         const timer2 = metrics.createTimer('metar_api_request');
-        const response = await axios.get(`https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString=${station}&hoursBeforeNow=1`);
+        const response = await axios.get(`https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString=${station}&hoursBeforeNow=${metarCheckPeriod}`
+        ,
+        {validateStatus: () => true});
+
         timer2.stop();
 
         if (!response) {
@@ -141,11 +149,37 @@ app.get('/metar', async (req, res) => {
             return;
         }
 
+        console.log("Metar Response code:",response.status);
+
+        if (response.status !== 200) {
+            throw new Error("Received error from External API:" + response.status)
+        }
+
         const parsed = parser.parse(response.data);
-        return decode(parsed.response.data.METAR.raw_text);
+        
+        if (parsed.response && parsed.response.data && parsed.response.data && parsed.response.data.METAR) {
+            aux = parsed.response.data.METAR;
+
+            const dataCount = Array.isArray(aux)
+                ? aux.length
+                : 1;
+            console.log("data count:",dataCount);
+
+            // Always return the first value
+            const finalNode = dataCount > 1 ? aux[0] : aux;
+
+            return  {"status":"ok", "data": decode(finalNode.raw_text) };
+        }
+        else {
+            console.log("No data");
+            return {"status":"no_data", "data":""}
+        }
     };
 
-    await getFromCacheOrApi(cacheKey, apiRequestFunction, res, 3600);
+    // data seems to be created at most every hour, but it takes time to be avaialable on the API
+    // using a wider range and caching results for 30 minutes, we can increase the chance of getting the most recent results
+    // and supporting the case of data aging for some airports
+    await getFromCacheOrApi(cacheKey, apiRequestFunction, res, 30);
     timer.stop();
 });
 
@@ -160,13 +194,25 @@ app.get('/spaceflight_news', async (req, res) => {
     const cacheKey = `spaceflight_news:${newsCount}`;
 
     const apiRequestFunction = async () => {
-        const timer2 = metrics.createTimer('metar_api_request');
-        const response = await axios.get(`https://api.spaceflightnewsapi.net/v3/articles?_limit=${newsCount}`);
+        const timer2 = metrics.createTimer('spaceflight_news_api_request');
+        const response = await axios.get(`https://api.spaceflightnewsapi.net/v3/articles?_limit=${newsCount}`
+        ,
+        {validateStatus: () => true});
         timer2.stop();
+
+        console.log("SpaceFlight News Response code:",response.status);
+
+        if (response.status !== 200) {
+            throw new Error("Received error from External API:" + response.status)
+        }
+
         return response.data.map((item) => item.title);
     };
 
-    await getFromCacheOrApi(cacheKey, apiRequestFunction, res, 3600);
+    // News extractor process runs every 10 minutes, as stated in the documentation: 
+    // https://github.com/TheSpaceDevs/Tutorials/blob/main/faqs/faq_SNAPI.md#how-often-is-the-data-updated
+    // It's not possible to know exactly when it runs, so we take a 5 min approach to increase the chance of getting a new version
+    await getFromCacheOrApi(cacheKey, apiRequestFunction, res, 30);
     timer.stop();
 });
 
@@ -178,14 +224,27 @@ app.get('/quote', async (req, res) => {
 
     const apiRequestFunction = async () => {
         var timer2 = metrics.createTimer('quote_api_request');
-        const response = await axios.get('https://api.quotable.io/quotes/random');
+
+        const response = await axios.get('https://api.quotable.io/quotes/random',
+        {validateStatus: () => true});
+
         timer2.stop();
+
+        console.log("Quotable Response code:",response.status);
+
+        if (response.status !== 200) {
+            throw new Error("Received error from External API:" + response.status)
+        }
+        
         return response.data.map((item) => {
             return {quote: item.content, author: item.author};
         });
+
+        
     };
 
-    await getFromCacheOrApi(cacheKey, apiRequestFunction, res, 3600);
+    // Random quotes are required, so cache is being disabled despite api config
+    await getFromCacheOrApi(cacheKey, apiRequestFunction, res, 0);
     timer.stop();
 });
 
